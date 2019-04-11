@@ -1,4 +1,4 @@
-package RFBService;
+package de.dlaube.ratsecast;
 
 import java.awt.Color;
 import java.awt.image.DirectColorModel;

@@ -1,12 +1,12 @@
-package RFBService;
+package de.dlaube.ratsecast;
 
-import java.awt.Frame;
-import java.awt.Toolkit;
+import java.awt.*;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
+import java.lang.annotation.Native;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.ArrayList;
@@ -33,236 +33,44 @@ import RFBDemo.RFBDemo;
  */
 public class RFBService implements Runnable {
 
-	/**
-	 * RFB version string. This string helps vnc viewers to determine RFB server
-	 * capabilities and protocol format.<BR>
-	 * It is set to version 3.3 mainly because of {@link #SECURITY_TYPE} record.
-	 */
 	private final byte[] RFB_VER = "RFB 003.003\n".getBytes();
-	
-	/**
-	 * Simple authentication where we don't request any password from user to enter during
-	 * session establishment.
-	 */
 	private final byte[] SECURITY_TYPE = {0x00, 0x00, 0x00, 0x01};
-	
-	/**
-	 * Client socket instance provided in constructor of this class.
-	 */
+
 	private Socket clientSocket;
-	
-	/**
-	 * Input stream instance provided in constructor of this class.
-	 */
+
 	private BufferedInputStream in;
-	
-	/**
-	 * Output stream instance provided in constructor of this class.
-	 */
 	private BufferedOutputStream out;
 	
-	/**
-	 * Pixel encoding. How many bits per pixel are used. This is set by client
-	 * in {@link #readSetPixelFormat()} method.<BR>
-	 * Possible values are: <I>8</I> and <I>32</I><BR>
-	 * Other values are not valid.
-	 */
-	private byte bits_per_pixel = 0;
-	
-	/**
-	 * Desktop color depth. Currently unused.
-	 */
-	private byte depth = 0;
-	
-	/**
-	 * Big endian flag. Currently unused.
-	 */
-	private byte big_endian = 0;
-	
-	/**
-	 * True color flag. Currently unused.
-	 */
-	private byte true_color = 0;
-	
-	/**
-	 * Red color maximum value. Currently unused.
-	 */
-	private int red_maximum = 0;
-	
-	/**
-	 * Green color maximum value. Currently unused.
-	 */
-	private int green_maximum = 0;
-	
-	/**
-	 * Blue color maximum value. Currently unused.
-	 */
-	private int blue_maximum = 0;
-	
-	/**
-	 * Bit position where red color value begin. Currently unused.
-	 */
-	private byte red_shift = 0;
-	
-	/**
-	 * Bit position where green color value begin. Currently unused.
-	 */
-	private byte green_shift = 0;
-	
-	/**
-	 * Bit position where blue color value begin. Currently unused.
-	 */
-	private byte blue_shift = 0;
-	
-	/**
-	 * Color mapping of RGB colors into 8-bit colors.
-	 */
-	private ColorMap8bit colorMap;
-	
-	/**
-	 * A list of supported encodings that are reported by vnc viewer.
-	 * See {@link #readSetEncoding()} method.
-	 */
-	private List<Integer> supportedEncoding;
 
-	/**
-	 * Screen dimension which is initially sent to client. See:<BR>
-	 * {@link #sendServerInit(int, int, String)} method.
-	 */
+	private byte bits_per_pixel = 0;
+	private byte depth = 0;
+	private byte big_endian = 0;
+	private byte true_color = 0;
+	private int red_maximum = 0;
+	private int green_maximum = 0;
+	private int blue_maximum = 0;
+	private byte red_shift = 0;
+	private byte green_shift = 0;
+	private byte blue_shift = 0;
+	private ColorMap8bit colorMap;
+	private List<Integer> supportedEncoding;
 	public int screenWidth, screenHeight;
-	
-	/**
-	 * A flag that is set to <I>true</I> when client sends frame buffer update
-	 * request with incremental flag.<BR>
-	 * This flag is then used by Swing components and listeners to determine if
-	 * screen update should be sent to VNC viewer(s).
-	 */	
 	public boolean incrementalFrameBufferUpdate;
-	
-	/**
-	 * Instance of RFB service.
-	 * 
-	 * @param clientSocket client socket when a new connection is accepted
-	 * 
-	 * @throws IOException
-	 */
-	public RFBService(Socket clientSocket) throws IOException {
-		
-		/*
-		 * Save instance of client socket. 
-		 */
+
+	private NativeInterface nativeInterface;
+
+	public RFBService(Socket clientSocket, NativeInterface nativeInterface) throws IOException {
 		this.clientSocket = clientSocket;
-		
-		/*
-		 * Create input and output streams. They will be used to write and read bytes.
-		 */
+
 		this.in = new BufferedInputStream(clientSocket.getInputStream());
 		this.out = new BufferedOutputStream(clientSocket.getOutputStream());
-		
-		/*
-		 * Initially this flag should be false.
-		 */
+
 		incrementalFrameBufferUpdate = false;
-		
-		/*
-		 * Instance of 8-bit color map in case that VNC viewer request 8-bit pixel encoding.
-		 */
+
 		colorMap = new ColorMap8bit();
-		
-		/*
-		 * Supported encodings, array list of integers.
-		 */
 		supportedEncoding = new ArrayList<Integer>();
-		
-	}
-	
-	/**
-	 * Read 2 bytes from socket and return integer value.
-	 * 
-	 * @return integer
-	 * @throws IOException
-	 */
-	private int readU16int() throws IOException {
-		
-		byte[] buffer = new byte[2];
-		
-		int offset = 0, left = buffer.length;
-		while (offset < buffer.length) {
-			int numOfBytesRead = 0;
-			numOfBytesRead = in.read(buffer, offset, left);
-			offset = offset + numOfBytesRead;
-			left = left - numOfBytesRead;
-		}
-		
-		int value = ((buffer[0] & 0xFF) << 8)
-				+ (buffer[1] & 0xFF);
 
-		return value;
-		
-	}
-
-	/**
-	 * Read 4 bytes from socket and return integer value.
-	 * 
-	 * @return integer
-	 * @throws IOException
-	 */
-	private int readU32int() throws IOException {
-		
-		byte[] buffer = new byte[4];
-		
-		int offset = 0, left = buffer.length;
-		while (offset < buffer.length) {
-			int numOfBytesRead = 0;
-			numOfBytesRead = in.read(buffer, offset, left);
-			offset = offset + numOfBytesRead;
-			left = left - numOfBytesRead;
-		}
-		
-		int value = (
-				  ((buffer[0] << 24) & 0xFF000000)
-				| ((buffer[1] << 16) & 0x00FF0000)
-				| ((buffer[2] << 8 ) & 0x0000FF00)
-				| ( buffer[3]        & 0x000000FF));
-
-		return value;
-		
-	}
-
-	/**
-	 * Write 2 bytes on socket.
-	 * 
-	 * @param value integer value between 0 and 65535
-	 * @throws IOException
-	 */
-	private void writeU16int(int value) throws IOException {
-		
-		byte[] buffer = new byte[2];
-		
-		buffer[0] = (byte) ((value & 0x0000FF00) >> 8);
-		buffer[1] = (byte) ((value & 0x000000FF) );
-
-		out.write(buffer);
-		
-	}
-	
-	/**
-	 * Write 4 bytes on socket.
-	 * 
-	 * @param value integer value between <I>Integer.MIN_VALUE</I> and <I>Integer.MAX_VALUE</I>
-	 * @throws IOException
-	 */
-	private void writeS32int(int value) throws IOException {
-
-		byte[] buffer = new byte[4];
-		
-		buffer[0] = (byte) ((value & 0xFF000000) >> 24);
-		buffer[1] = (byte) ((value & 0x00FF0000) >> 16);
-		buffer[2] = (byte) ((value & 0x0000FF00) >> 8);
-		buffer[3] = (byte) ((value & 0x000000FF) );
-		
-		out.write(buffer);
-		
+		this.nativeInterface = nativeInterface;
 	}
 	
 	/**
@@ -275,25 +83,7 @@ public class RFBService implements Runnable {
 		out.write(RFB_VER);
 		out.flush();
 	}
-	
-	/**
-	 * Read array of bytes from socket.
-	 * 
-	 * @param len how many bytes to read
-	 * @return byte array
-	 * @throws IOException
-	 */
-	private byte[] readU8Array(int len) throws IOException {
-		byte[] buffer = new byte[len];
-		int offset = 0, left = buffer.length;
-		while (offset < buffer.length) {
-			int numOfBytesRead = 0;
-			numOfBytesRead = in.read(buffer, offset, left);
-			offset = offset + numOfBytesRead;
-			left = left - numOfBytesRead;
-		}
-		return buffer;		
-	}
+
 	
 	/**
 	 * Read byte array that represents protocol version.
@@ -489,15 +279,14 @@ public class RFBService implements Runnable {
 		 *  0 -  user released key.
 		 *  1 -  user press key.
 		 */
-		int downFlag = in.read();
+		boolean downFlag = in.read() == 1;
 		
 		@SuppressWarnings("unused")
 		int padding = readU16int();
 		
 		int keyValue = readU32int();		
 
-		RobotKeyboard.robo.sendKey(keyValue, downFlag);
-
+		nativeInterface.keyDown(keyValue, downFlag);
 	}
 	
 	/**
@@ -525,35 +314,9 @@ public class RFBService implements Runnable {
 		
 		int x_pos = readU16int();
 		int y_pos = readU16int();
-		
-		/*
-		 * Calculate real offset.
-		 */
-		x_pos = x_pos + JFrameMainWindow.jFrameMainWindow.getX();
-		y_pos = y_pos + JFrameMainWindow.jFrameMainWindow.getY();
 
 		if (buttonMask > 0) {
-			
-			/*
-			 * Consider case when main window is minimized.
-			 */
-			boolean minimized = ( (JFrameMainWindow.jFrameMainWindow.getState() & Frame.ICONIFIED) == Frame.ICONIFIED );
-			
-			if (minimized) {
-				
-				/*
-				 * If main window is minimized ...
-				 */
-				if ( (buttonMask & 0x111) > 0) {
-					
-					/*
-					 * ... restore main window on any click but not on mouse wheel event.
-					 * That is why mask 0x111 is used.
-					 */
-					JFrameMainWindow.jFrameMainWindow.setState(Frame.NORMAL);
-				}
-			}
-			else {
+
 
 				/*
 				 * Check for button and generate mouse click.
@@ -562,40 +325,42 @@ public class RFBService implements Runnable {
 					/*
 					 * Left click.
 					 */
-					RobotMouse.robo.mouseClick(x_pos, y_pos);
+					nativeInterface.mouseButton(0, true, x_pos, y_pos);
+					nativeInterface.mouseButton(0, false, x_pos, y_pos);
 				}
 				else if (buttonMask == 3) {
 					/*
 					 * Middle click.
 					 */
-					RobotMouse.robo.mouseMiddleClick(x_pos, y_pos);
+					nativeInterface.mouseButton(2, true, x_pos, y_pos);
+					nativeInterface.mouseButton(2, false, x_pos, y_pos);
 				}
 				else if (buttonMask == 4) {
 					/*
 					 * Right click.
 					 */
-					RobotMouse.robo.mouseRightClick(x_pos, y_pos);
+					nativeInterface.mouseButton(1, true, x_pos, y_pos);
+					nativeInterface.mouseButton(1, false, x_pos, y_pos);
 				}
 				else if (buttonMask == 8) {
 					/*
 					 * Mouse wheel.
 					 */
-					RobotMouse.robo.mouseWheel(-100);
+					nativeInterface.mouseWheel(false);
 				}
 				else if (buttonMask == 16) {
 					/*
 					 * Mouse wheel.
 					 */
-					RobotMouse.robo.mouseWheel(100);
+					nativeInterface.mouseWheel(true);
 				}
-			}
 			
 		}
 		else {
 			/*
 			 * Move mouse pointer only.
 			 */
-			RobotMouse.robo.mouseMove(x_pos, y_pos);
+			nativeInterface.mouseMove(x_pos, y_pos);
 		}
 		
 	}
@@ -963,6 +728,114 @@ public class RFBService implements Runnable {
 	 */
 	private void err(String line) {
 		System.err.println(line);
+	}
+
+	/**
+	 * Read 2 bytes from socket and return integer value.
+	 *
+	 * @return integer
+	 * @throws IOException
+	 */
+	private int readU16int() throws IOException {
+
+		byte[] buffer = new byte[2];
+
+		int offset = 0, left = buffer.length;
+		while (offset < buffer.length) {
+			int numOfBytesRead = 0;
+			numOfBytesRead = in.read(buffer, offset, left);
+			offset = offset + numOfBytesRead;
+			left = left - numOfBytesRead;
+		}
+
+		int value = ((buffer[0] & 0xFF) << 8)
+				+ (buffer[1] & 0xFF);
+
+		return value;
+
+	}
+
+	/**
+	 * Read 4 bytes from socket and return integer value.
+	 *
+	 * @return integer
+	 * @throws IOException
+	 */
+	private int readU32int() throws IOException {
+
+		byte[] buffer = new byte[4];
+
+		int offset = 0, left = buffer.length;
+		while (offset < buffer.length) {
+			int numOfBytesRead = 0;
+			numOfBytesRead = in.read(buffer, offset, left);
+			offset = offset + numOfBytesRead;
+			left = left - numOfBytesRead;
+		}
+
+		int value = (
+				((buffer[0] << 24) & 0xFF000000)
+						| ((buffer[1] << 16) & 0x00FF0000)
+						| ((buffer[2] << 8 ) & 0x0000FF00)
+						| ( buffer[3]        & 0x000000FF));
+
+		return value;
+
+	}
+
+	/**
+	 * Write 2 bytes on socket.
+	 *
+	 * @param value integer value between 0 and 65535
+	 * @throws IOException
+	 */
+	private void writeU16int(int value) throws IOException {
+
+		byte[] buffer = new byte[2];
+
+		buffer[0] = (byte) ((value & 0x0000FF00) >> 8);
+		buffer[1] = (byte) ((value & 0x000000FF) );
+
+		out.write(buffer);
+
+	}
+
+	/**
+	 * Write 4 bytes on socket.
+	 *
+	 * @param value integer value between <I>Integer.MIN_VALUE</I> and <I>Integer.MAX_VALUE</I>
+	 * @throws IOException
+	 */
+	private void writeS32int(int value) throws IOException {
+
+		byte[] buffer = new byte[4];
+
+		buffer[0] = (byte) ((value & 0xFF000000) >> 24);
+		buffer[1] = (byte) ((value & 0x00FF0000) >> 16);
+		buffer[2] = (byte) ((value & 0x0000FF00) >> 8);
+		buffer[3] = (byte) ((value & 0x000000FF) );
+
+		out.write(buffer);
+
+	}
+
+	/**
+	 * Read array of bytes from socket.
+	 *
+	 * @param len how many bytes to read
+	 * @return byte array
+	 * @throws IOException
+	 */
+	private byte[] readU8Array(int len) throws IOException {
+		byte[] buffer = new byte[len];
+		int offset = 0, left = buffer.length;
+		while (offset < buffer.length) {
+			int numOfBytesRead = 0;
+			numOfBytesRead = in.read(buffer, offset, left);
+			offset = offset + numOfBytesRead;
+			left = left - numOfBytesRead;
+		}
+		return buffer;
 	}
 	
 }
