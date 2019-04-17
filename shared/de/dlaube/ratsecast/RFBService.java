@@ -2,21 +2,14 @@ package de.dlaube.ratsecast;
 
 import java.awt.*;
 import java.awt.datatransfer.Clipboard;
-import java.awt.datatransfer.StringSelection;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
-import java.lang.annotation.Native;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.List;
 
-import RobotService.RobotKeyboard;
-import RobotService.RobotMouse;
-import RobotService.RobotScreen;
-import SwingDemo.JFrameMainWindow;
-import RFBDemo.RFBDemo;
 
 /**
  * Remote Frame Buffer Runnable instance for each client connection.<BR>
@@ -429,10 +422,12 @@ public class RFBService implements Runnable {
 				
 				log ("Frame buffer update request received. Full update requested.");
 				
-				incrementalFrameBufferUpdate = false;				
+				incrementalFrameBufferUpdate = false;
+
+
 				
-				int x = JFrameMainWindow.jFrameMainWindow.getX();
-				int y = JFrameMainWindow.jFrameMainWindow.getY();
+				int x = Toolkit.getDefaultToolkit().getScreenSize().width;
+				int y = Toolkit.getDefaultToolkit().getScreenSize().height;
 
 				RobotScreen.robo.getScreenshot(x, y, width, height); 
 				
@@ -495,23 +490,8 @@ public class RFBService implements Runnable {
 		log ("Framebuffer update at (" + x + ", " + y + "). Rectangle: " + width + "x" + height + 
 				", encoding: " + encodingType + ", incremental: " + incrementalFrameBufferUpdate +
 				", bits per pixel: " + bits_per_pixel);
-		
-		for (int rgbValue : screen) {
 
-			int red   = (rgbValue & 0x000000FF);
-			int green = (rgbValue & 0x0000FF00) >> 8;
-			int blue  = (rgbValue & 0x00FF0000) >> 16;
-
-			if (bits_per_pixel == 8) {
-				out.write((byte) colorMap.get8bitPixelValue(red, green, blue));
-			}
-			else {
-				out.write(red);
-				out.write(green);
-				out.write(blue);
-				out.write(0);
-			}
-		}
+		writeBuffer(screen);
 		out.flush();
 	}
 	
@@ -558,22 +538,7 @@ public class RFBService implements Runnable {
 			writeU16int(screenHeight);
 			writeS32int(encodingType);
 
-			for (int rgbValue : screen) {
-
-				int red   = (rgbValue & 0x000000FF);
-				int green = (rgbValue & 0x0000FF00) >> 8;
-				int blue  = (rgbValue & 0x00FF0000) >> 16;
-
-				if (bits_per_pixel == 8) {
-					out.write((byte) colorMap.get8bitPixelValue(red, green, blue));
-				}
-				else {
-					out.write(red);
-					out.write(green);
-					out.write(blue);
-					out.write(0);
-				}
-			}
+			writeBuffer(screen);
 
 			encodingType = -223;
 			
@@ -595,7 +560,26 @@ public class RFBService implements Runnable {
 			err ("Client does not support DesktopSize pseudo encoding.");
 		}
 	}
-	
+
+	private void writeBuffer(int[] screen) throws IOException {
+		for (int rgbValue : screen) {
+
+			int red   = (rgbValue & 0x000000FF);
+			int green = (rgbValue & 0x0000FF00) >> 8;
+			int blue  = (rgbValue & 0x00FF0000) >> 16;
+
+			if (bits_per_pixel == 8) {
+				out.write((byte) colorMap.get8bitPixelValue(red, green, blue));
+			}
+			else {
+				out.write(red);
+				out.write(green);
+				out.write(blue);
+				out.write(0);
+			}
+		}
+	}
+
 	@Override
 	public void run() {
 		
@@ -740,6 +724,16 @@ public class RFBService implements Runnable {
 
 		byte[] buffer = new byte[2];
 
+		readBuffer(buffer);
+
+		int value = ((buffer[0] & 0xFF) << 8)
+				+ (buffer[1] & 0xFF);
+
+		return value;
+
+	}
+
+	private void readBuffer(byte[] buffer) throws IOException {
 		int offset = 0, left = buffer.length;
 		while (offset < buffer.length) {
 			int numOfBytesRead = 0;
@@ -747,12 +741,6 @@ public class RFBService implements Runnable {
 			offset = offset + numOfBytesRead;
 			left = left - numOfBytesRead;
 		}
-
-		int value = ((buffer[0] & 0xFF) << 8)
-				+ (buffer[1] & 0xFF);
-
-		return value;
-
 	}
 
 	/**
@@ -765,13 +753,7 @@ public class RFBService implements Runnable {
 
 		byte[] buffer = new byte[4];
 
-		int offset = 0, left = buffer.length;
-		while (offset < buffer.length) {
-			int numOfBytesRead = 0;
-			numOfBytesRead = in.read(buffer, offset, left);
-			offset = offset + numOfBytesRead;
-			left = left - numOfBytesRead;
-		}
+		readBuffer(buffer);
 
 		int value = (
 				((buffer[0] << 24) & 0xFF000000)
@@ -828,13 +810,7 @@ public class RFBService implements Runnable {
 	 */
 	private byte[] readU8Array(int len) throws IOException {
 		byte[] buffer = new byte[len];
-		int offset = 0, left = buffer.length;
-		while (offset < buffer.length) {
-			int numOfBytesRead = 0;
-			numOfBytesRead = in.read(buffer, offset, left);
-			offset = offset + numOfBytesRead;
-			left = left - numOfBytesRead;
-		}
+		readBuffer(buffer);
 		return buffer;
 	}
 	
