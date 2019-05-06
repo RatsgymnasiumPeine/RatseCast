@@ -1,7 +1,6 @@
 package de.dlaube.ratsecast;
 
 import java.awt.*;
-import java.awt.datatransfer.Clipboard;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
@@ -383,9 +382,9 @@ public class RFBService implements Runnable {
 		    /*
 		     * Transfer to system clipboard.
 		     */
-			StringSelection selection = new StringSelection(textLine);
-			Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-		    clipboard.setContents(selection, selection);
+			//StringSelection selection = new StringSelection(textLine);
+			//Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+		    //clipboard.setContents(selection, selection);
 			
 		}
 		else {
@@ -423,15 +422,8 @@ public class RFBService implements Runnable {
 				log ("Frame buffer update request received. Full update requested.");
 				
 				incrementalFrameBufferUpdate = false;
-
-
 				
-				int x = Toolkit.getDefaultToolkit().getScreenSize().width;
-				int y = Toolkit.getDefaultToolkit().getScreenSize().height;
-
-				RobotScreen.robo.getScreenshot(x, y, width, height); 
-				
-				sendFrameBufferUpdate(x_pos, y_pos, width, height, 0, RobotScreen.robo.getColorImageBuffer());					
+				sendFrameBufferUpdate(x_pos, y_pos, width, height, 0, nativeInterface.getImageBuffer(x_pos, y_pos, width, height));
 				
 				
 			}
@@ -505,19 +497,14 @@ public class RFBService implements Runnable {
 	{
 		
 		if (supportedEncoding.contains(-223)) {
-			
-			int x = JFrameMainWindow.jFrameMainWindow.getX();
-			int y = JFrameMainWindow.jFrameMainWindow.getY();
 
-			int newWidth  = JFrameMainWindow.jFrameMainWindow.getWidth();
-			int newHeight = JFrameMainWindow.jFrameMainWindow.getHeight();
-			
-			RobotScreen.robo.getScreenshot(x, y, screenWidth, screenHeight);
-			
-			x = 0;
-			y = 0;
+			int x = 0;
+			int y = 0;
+
+			int screenWidth = nativeInterface.getScreenWidth();
+			int screenHeight = nativeInterface.getScreenHeight();
+
 			int encodingType = 0;
-			int[] screen = RobotScreen.robo.getColorImageBuffer();
 					
 			byte messageType = 0x00;
 			byte padding     = 0x00;
@@ -538,20 +525,17 @@ public class RFBService implements Runnable {
 			writeU16int(screenHeight);
 			writeS32int(encodingType);
 
-			writeBuffer(screen);
+			writeBuffer(nativeInterface.getImageBuffer(x, y, screenWidth, screenHeight));
 
 			encodingType = -223;
 			
 			writeU16int(x);
 			writeU16int(y);
-			writeU16int(newWidth);
-			writeU16int(newHeight);
+			writeU16int(screenWidth);
+			writeU16int(screenHeight);
 			writeS32int(encodingType);
 			
 			out.flush();
-			
-			screenWidth = newWidth;
-			screenHeight = newHeight;
 			
 			log ("New screen size: " + screenWidth + " x " + screenHeight);
 			
@@ -613,9 +597,9 @@ public class RFBService implements Runnable {
 			 * RFB server sends ServerInit message that includes screen resolution,
 			 * number of colors, depth, screen title, etc.
 			 */
-			screenWidth = JFrameMainWindow.jFrameMainWindow.getWidth();
-			screenHeight = JFrameMainWindow.jFrameMainWindow.getHeight();
-			String windowTitle = JFrameMainWindow.jFrameMainWindow.getTitle();
+			screenWidth = nativeInterface.getScreenWidth();
+			screenHeight = nativeInterface.getScreenHeight();
+			String windowTitle = "Test";
 			sendServerInit(screenWidth, screenHeight, windowTitle);			
 			
 			/*
@@ -684,12 +668,9 @@ public class RFBService implements Runnable {
 			log("");
 			
 			clientSocket.close();
-			
-			RFBDemo.rfbClientList.remove(this);
 		
 		} catch (SocketException e) {		
 			log("Client connection closed.");
-			RFBDemo.rfbClientList.remove(this);
 			
 		} catch (IOException e) {		
 			e.printStackTrace();

@@ -1,13 +1,19 @@
 package de.dlaube.ratsecast;
 
 import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferInt;
 
 public class DesktopNativeInterface implements NativeInterface{
 
     private Robot robot;
 
     public DesktopNativeInterface(){
-        robot = new Robot();
+        try {
+            robot = new Robot();
+        } catch(Exception e){
+            System.err.println("Error initializing Robot");
+        }
     }
 
     @Override
@@ -35,5 +41,23 @@ public class DesktopNativeInterface implements NativeInterface{
     @Override
     public void mouseWheel(boolean direction) {
         robot.mouseWheel(direction ? 100 : -100);
+    }
+
+    @Override
+    public int[] getImageBuffer(int x, int y, int width, int height) {
+        Rectangle screenRect = new Rectangle(x, y, width, height);
+        BufferedImage colorImage = robot.createScreenCapture(screenRect);
+
+        return  ((DataBufferInt) colorImage.getRaster().getDataBuffer()).getData();
+    }
+
+    @Override
+    public int getScreenWidth() {
+        return Toolkit.getDefaultToolkit().getScreenSize().width;
+    }
+
+    @Override
+    public int getScreenHeight() {
+        return Toolkit.getDefaultToolkit().getScreenSize().height;
     }
 }
