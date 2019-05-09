@@ -25,3 +25,8 @@ hs_err_pid*
 *.iws
 *.ipr
 *.iml
+
+.gradle/
+.settings/
+.project
+.classpath
