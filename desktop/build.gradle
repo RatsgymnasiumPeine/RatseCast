@@ -1,0 +1,9 @@
+sourceCompatibility = '1.11'
+targetCompatibility = '1.11'
+version = '1.2.1'
+
+run {
+    ignoreExitValue = true
+}
+
+mainClassName = "de.dlaube.ratsecast.DesktopStarter"

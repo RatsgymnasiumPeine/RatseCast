@@ -12,13 +12,14 @@ public class DesktopStarter {
         int port = 5902;
         ServerSocket serverSocket;
         serverSocket = new ServerSocket(port);
-
+        
         while(true){
             /*
              * Wait and accept new client.
              */
+            
             Socket client = serverSocket.accept();
-
+            
             /*
              * Create new object for each client.
              */
